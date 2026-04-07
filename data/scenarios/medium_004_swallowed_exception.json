@@ -1,0 +1,14 @@
+{
+  "pr_title": "fix: make order creation resilient to downstream failures",
+  "pr_description": "The order service was propagating payment processor timeouts all the way to the user. This PR catches those errors so the UI always gets a clean response and support can investigate asynchronously.",
+  "diff": "--- a/src/orders/service.py\n+++ b/src/orders/service.py\n@@ -12,30 +12,47 @@ from notifications import send_confirmation_email\n \n def create_order(user_id: int, cart: Cart, payment_token: str) -> Order:\n     \"\"\"Create an order: charge the user, persist the order, send email.\"\"\"\n-    # Charge first; if this raises, no order is created (correct)\n-    charge = payment_gateway.charge(payment_token, cart.total_cents)\n+    try:\n+        charge = payment_gateway.charge(payment_token, cart.total_cents)\n+    except Exception:  # BUG: bare except swallows ALL exceptions including successful charges\n+        # If charge raised a network timeout AFTER the bank processed it,\n+        # we silently return None — user is charged but gets no order.\n+        log.warning(\"Payment gateway error, continuing\")\n+        return None  # BUG: caller expects an Order, not None — breaks downstream\n \n     order = Order(\n         user_id=user_id,\n         cart_id=cart.id,\n         charge_id=charge.id,\n         status=\"pending\",\n     )\n     db.session.add(order)\n-    db.session.commit()\n \n     try:\n         send_confirmation_email(user_id, order)\n     except Exception as exc:\n-        log.warning(\"Email failed but order is saved: %s\", exc)\n+        # BUG: commit happens here so if email fails we ALSO roll back the order\n+        db.session.commit()\n+        log.warning(\"Email and order both failed: %s\", exc)  # misleading log\n+        raise  # re-raises, caller sees the email error not the order status\n+    else:\n+        db.session.commit()\n \n-    return order\n+    return order  # unreachable if email raises, but order may or may not be committed",
+  "ground_truth": {
+    "bugs": [
+      ["swallowed", "bare except", "silent", "silently", "except Exception", "swallows", "hides"],
+      ["charged", "double charge", "timeout", "payment processed", "user charged", "money deducted"],
+      ["None", "returns None", "caller expects Order", "NoneType", "None return"],
+      ["commit", "rollback", "transaction", "db.session.commit", "order not saved"]
+    ],
+    "should_approve": false
+  }
+}

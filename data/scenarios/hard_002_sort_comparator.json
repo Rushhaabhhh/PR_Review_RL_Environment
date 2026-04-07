@@ -1,0 +1,14 @@
+{
+  "pr_title": "feat: rank search results by composite relevance score",
+  "pr_description": "Search results were being returned in arbitrary DB order. This PR adds a multi-key ranking function that sorts by (relevance_score DESC, recency DESC, title ASC) so the best matches appear first. Includes a tie-breaking stable sort.",
+  "diff": "--- a/src/search/ranking.py\n+++ b/src/search/ranking.py\n@@ -1,18 +1,60 @@\n from dataclasses import dataclass\n from datetime import datetime\n-from typing import List\n+from typing import List, Optional\n \n @dataclass\n class SearchResult:\n     doc_id: str\n     title: str\n-    relevance_score: float\n+    relevance_score: Optional[float]  # None for unscored legacy docs\n     created_at: datetime\n     author: str\n \n \n+def _sort_key(result: SearchResult):\n+    # BUG: None relevance_score causes TypeError in Python 3 when comparing\n+    # None < 0.5 is not defined — will crash on mixed scored/unscored result sets\n+    return (\n+        -result.relevance_score,     # DESC (negate for ascending sort)\n+        -result.created_at.timestamp(),  # DESC\n+        result.title.lower(),\n+    )\n+\n+\n+def rank_results(results: List[SearchResult]) -> List[SearchResult]:\n+    \"\"\"Return results sorted by relevance DESC, recency DESC, title ASC.\"\"\"\n+    # BUG: stable=True is not a valid kwarg for sorted(); it's always stable in Python\n+    # The real bug: None relevance scores cause TypeError and crash the whole ranking\n+    return sorted(results, key=_sort_key, stable=True)  # TypeError: unexpected keyword\n+\n+\n+def top_k(results: List[SearchResult], k: int) -> List[SearchResult]:\n+    \"\"\"Return the top k results.\"\"\"\n+    ranked = rank_results(results)\n+    # BUG: if k > len(ranked), this is fine, but if k is negative Python returns\n+    # results[:-k] not an empty list — wrong behaviour for k=0 too\n+    return ranked[:k]\n+\n+\n+def deduplicate(results: List[SearchResult]) -> List[SearchResult]:\n+    \"\"\"Remove duplicate doc_ids, keeping the highest-scored copy.\"\"\"\n+    seen: dict[str, SearchResult] = {}\n+    for r in results:\n+        if r.doc_id not in seen:\n+            seen[r.doc_id] = r\n+        else:\n+            # BUG: should keep higher score but uses 'or' which keeps first non-None\n+            # If existing entry has score 0.1 and new has 0.9, 0.1 wins because it's truthy\n+            seen[r.doc_id] = seen[r.doc_id] or r\n+    return list(seen.values())",
+  "ground_truth": {
+    "bugs": [
+      ["TypeError", "NoneType", "None comparison", "None relevance", "Optional", "cannot compare", "mixed None"],
+      ["stable=True", "unexpected keyword", "invalid keyword", "TypeError: sorted", "sorted() got"],
+      ["negative k", "k=0", "ranked[:k]", "slice with negative", "k negative"],
+      ["deduplicate", "or", "truthy", "0.1 wins", "wrong score", "keeps first", "should keep higher"]
+    ],
+    "should_approve": false
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "pr_title": "fix: normalise user email to lowercase on login",
+  "pr_description": "Ensures email comparison is case-insensitive by lowercasing the email before looking up the user in the database. Fixes the bug where `Alice@Example.com` and `alice@example.com` were treated as different accounts.",
+  "diff": "--- a/src/auth/login.py\n+++ b/src/auth/login.py\n@@ -14,10 +14,14 @@ from db import get_user_by_email\n \n def authenticate(email: str, password: str):\n     \"\"\"Return the authenticated User or raise AuthError.\"\"\"\n-    user = get_user_by_email(email)\n+    user = get_user_by_email(email.lower())  # normalise before lookup\n     if not user:\n         raise AuthError(\"Invalid credentials\")\n-    if not check_password(password, user.password_hash):\n+\n+    # Normalise stored email too so display is consistent\n+    user.email = user.email.lower()  # BUG: user.email may be None for OAuth accounts\n+\n+    if not check_password(password, user.password_hash):\n         raise AuthError(\"Invalid credentials\")\n     return user\n@@ -28,6 +32,7 @@ def authenticate(email: str, password: str):\n def get_display_name(user) -> str:\n     \"\"\"Return a friendly display name for greeting banners.\"\"\"\n-    return user.name or user.email\n+    return user.name or user.email.upper()  # BUG: user.email could be None\n",
+  "ground_truth": {
+    "bugs": [
+      ["null", "none", "NoneType", "AttributeError", "dereference", "None dereference", "email is None", "email could be None"],
+      ["OAuth", "optional", "nullable", "may be None", "missing email"]
+    ],
+    "should_approve": false
+  }
+}

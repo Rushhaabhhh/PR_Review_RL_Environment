@@ -1,0 +1,12 @@
+{
+  "pr_title": "feat: add user search endpoint for admin panel",
+  "pr_description": "Adds a `/admin/users/search` endpoint so support staff can look up users by name or email. The query is passed directly from the UI. Uses our existing DB connection helper.",
+  "diff": "--- a/src/admin/routes.py\n+++ b/src/admin/routes.py\n@@ -1,8 +1,10 @@\n from flask import Blueprint, request, jsonify\n from db import get_connection\n-from auth import admin_required\n+from auth import admin_required, staff_required\n \n admin_bp = Blueprint(\"admin\", __name__, url_prefix=\"/admin\")\n \n+\n @admin_bp.route(\"/users\")\n @admin_required\n def list_users():\n@@ -12,18 +14,32 @@ def list_users():\n     return jsonify([u.to_dict() for u in users])\n \n \n+@admin_bp.route(\"/users/search\")\n+@staff_required\n+def search_users():\n+    \"\"\"Search users by name or email. Query param: ?q=<search term>\"\"\"\n+    q = request.args.get(\"q\", \"\")\n+    conn = get_connection()\n+    cur = conn.cursor()\n+    # BUG: raw string interpolation — SQL injection via ?q parameter\n+    query = f\"SELECT id, name, email, role FROM users WHERE name LIKE '%{q}%' OR email LIKE '%{q}%'\"\n+    cur.execute(query)\n+    rows = cur.fetchall()\n+    return jsonify([{\"id\": r[0], \"name\": r[1], \"email\": r[2], \"role\": r[3]} for r in rows])\n+\n+\n--- a/src/admin/bulk_export.py\n+++ b/src/admin/bulk_export.py\n@@ -3,10 +3,18 @@ import csv, io\n from db import get_connection\n \n def export_users_by_role(role: str) -> str:\n     \"\"\"Export all users matching role as CSV string.\"\"\"\n     conn = get_connection()\n     cur = conn.cursor()\n-    cur.execute(\"SELECT id, name, email FROM users WHERE role = %s\", (role,))\n+    # BUG: developer switched from parameterised query to f-string for 'consistency'\n+    cur.execute(f\"SELECT id, name, email FROM users WHERE role = '{role}'\")\n     rows = cur.fetchall()\n     output = io.StringIO()\n     writer = csv.writer(output)\n     writer.writerows(rows)\n     return output.getvalue()",
+  "ground_truth": {
+    "bugs": [
+      ["SQL injection", "sql injection", "f-string", "string interpolation", "parameterised", "parameterized", "bind parameter", "%s", "prepared statement"],
+      ["bulk_export", "export_users_by_role", "second file", "both queries", "also affected"]
+    ],
+    "should_approve": false
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "pr_title": "feat: add bubble sort to sorting utilities",
+  "pr_description": "Implements bubble sort for small arrays in the sorting utilities module. This will be used by the dashboard table component when the dataset is under 100 items to avoid loading the full sort library.",
+  "diff": "--- a/src/utils/sorting.py\n+++ b/src/utils/sorting.py\n@@ -1,12 +1,35 @@\n \"\"\"Sorting utility functions.\"\"\"\n \n+def bubble_sort(arr: list) -> list:\n+    \"\"\"Sort a list in ascending order using bubble sort.\n+\n+    Args:\n+        arr: The list to sort. Will be sorted in-place and returned.\n+\n+    Returns:\n+        The sorted list.\n+    \"\"\"\n+    n = len(arr)\n+    for i in range(n):\n+        for j in range(n):  # BUG: should be range(n - i - 1)\n+            if arr[j] > arr[j + 1]:  # IndexError when j == n-1\n+                arr[j], arr[j + 1] = arr[j + 1], arr[j]\n+    return arr\n+\n+\n def insertion_sort(arr: list) -> list:\n-    \"\"\"Sort using insertion sort — O(n^2) but stable.\"\"\"\n+    \"\"\"Sort using insertion sort — O(n^2), stable.\"\"\"\n     for i in range(1, len(arr)):\n         key = arr[i]\n         j = i - 1\n         while j >= 0 and arr[j] > key:\n             arr[j + 1] = arr[j]\n             j -= 1\n         arr[j + 1] = key\n     return arr",
+  "ground_truth": {
+    "bugs": [
+      ["off-by-one", "index out of bounds", "IndexError", "out of range", "range(n)", "j + 1", "n - i - 1", "n-i-1"],
+      ["range(n - i - 1)", "inner loop", "already sorted", "reduces comparisons"]
+    ],
+    "should_approve": false
+  }
+}

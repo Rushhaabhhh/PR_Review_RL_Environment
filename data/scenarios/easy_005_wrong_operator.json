@@ -1,0 +1,13 @@
+{
+  "pr_title": "fix: guard subscription tier checks against None values",
+  "pr_description": "Several places in the billing module were crashing when `user.subscription_tier` was None (free users who never subscribed). This PR adds guards and also refactors the tier comparison to be cleaner.",
+  "diff": "--- a/src/billing/access.py\n+++ b/src/billing/access.py\n@@ -8,22 +8,30 @@ TIERS = [\"free\", \"starter\", \"pro\", \"enterprise\"]\n \n def has_feature(user, feature: str) -> bool:\n     \"\"\"Return True if user's subscription tier grants access to feature.\"\"\"\n-    tier = user.subscription_tier\n-    if tier is None:\n-        tier = \"free\"\n+    tier = user.subscription_tier or \"free\"\n     return feature in FEATURE_MAP.get(tier, set())\n \n \n def is_paid_tier(user) -> bool:\n     \"\"\"Return True if the user is on any paid plan.\"\"\"\n     tier = user.subscription_tier or \"free\"\n-    return tier != \"free\"\n+    return tier is not \"free\"  # BUG: identity check instead of equality; always True for interned strings\n \n \n def tier_rank(tier: str) -> int:\n     \"\"\"Return numeric rank of a tier for comparison (higher = better).\"\"\"\n     try:\n         return TIERS.index(tier)\n     except ValueError:\n-        return -1\n+        return 0  # BUG: changed semantics — unknown tier now ranks equal to 'free' not below it\n \n \n def can_downgrade(user, target_tier: str) -> bool:\n     \"\"\"Return True if the user can switch to a lower tier.\"\"\"\n-    return tier_rank(user.subscription_tier) > tier_rank(target_tier)\n+    return tier_rank(user.subscription_tier) >= tier_rank(target_tier)  # BUG: >= allows same-tier 'downgrade'",
+  "ground_truth": {
+    "bugs": [
+      ["is not", "identity", "== instead", "equality", "string interning", "is not \"free\"", "!="],
+      ["unknown tier", "ValueError", "rank 0", "return 0", "same as free", "semantics changed"],
+      [">=", "same tier", "downgrade to same", "can_downgrade", "greater than or equal"]
+    ],
+    "should_approve": false
+  }
+}

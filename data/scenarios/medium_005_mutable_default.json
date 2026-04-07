@@ -1,0 +1,13 @@
+{
+  "pr_title": "refactor: unify request context builder across services",
+  "pr_description": "Extracts `RequestContext` into a shared module so all three services (auth, billing, notifications) build their request contexts the same way. Also adds support for attaching metadata tags to a context for distributed tracing.",
+  "diff": "--- /dev/null\n+++ b/src/shared/context.py\n@@ -0,0 +1,55 @@\n+\"\"\"Shared request context for distributed tracing.\"\"\"\n+\n+import uuid\n+from datetime import datetime\n+\n+\n+class RequestContext:\n+    def __init__(\n+        self,\n+        service: str,\n+        user_id: int | None = None,\n+        tags: dict = {},       # BUG: mutable default argument — shared across all instances\n+        trace_ids: list = [],  # BUG: same issue with list\n+    ):\n+        self.service = service\n+        self.user_id = user_id\n+        self.request_id = str(uuid.uuid4())\n+        self.created_at = datetime.utcnow()\n+        self.tags = tags        # BUG: stores reference, mutations bleed between callers\n+        self.trace_ids = trace_ids\n+\n+    def add_tag(self, key: str, value: str) -> None:\n+        self.tags[key] = value  # BUG: mutates the shared default dict\n+\n+    def push_trace(self, trace_id: str) -> None:\n+        self.trace_ids.append(trace_id)  # BUG: mutates the shared default list\n+\n+    def to_dict(self) -> dict:\n+        return {\n+            \"service\": self.service,\n+            \"user_id\": self.user_id,\n+            \"request_id\": self.request_id,\n+            \"created_at\": self.created_at.isoformat(),\n+            \"tags\": self.tags,\n+            \"trace_ids\": self.trace_ids,\n+        }\n+\n+\n+def build_context(\n+    service: str,\n+    user_id: int | None = None,\n+    extra_tags: dict = {},     # BUG: mutable default argument again in factory function\n+) -> RequestContext:\n+    ctx = RequestContext(service=service, user_id=user_id)\n+    ctx.tags.update(extra_tags)\n+    return ctx",
+  "ground_truth": {
+    "bugs": [
+      ["mutable default", "default argument", "shared default", "default mutable", "= {}", "= []", "mutable default argument"],
+      ["bleed", "shared state", "shared across instances", "mutations bleed", "persists between calls", "accumulate"],
+      ["None instead", "None as default", "dict()", "list()", "if tags is None"]
+    ],
+    "should_approve": false
+  }
+}

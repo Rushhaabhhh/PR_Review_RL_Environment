@@ -1,0 +1,13 @@
+{
+  "pr_title": "feat: add admin API endpoints for user management",
+  "pr_description": "Exposes CRUD operations for user records so the internal admin dashboard can manage accounts without going directly to the DB. These endpoints will sit behind the `/api/admin` prefix which is not publicly documented.",
+  "diff": "--- /dev/null\n+++ b/src/api/admin_users.py\n@@ -0,0 +1,64 @@\n+from flask import Blueprint, request, jsonify, abort\n+from db.models import User, db\n+from auth.decorators import login_required  # imported but not used below\n+\n+admin_users_bp = Blueprint(\"admin_users\", __name__)\n+\n+\n+@admin_users_bp.route(\"/api/admin/users\", methods=[\"GET\"])\n+def list_all_users():  # BUG: no @login_required, no @admin_required\n+    \"\"\"Return all users. Internal use only.\"\"\"\n+    users = User.query.all()\n+    return jsonify([u.to_dict() for u in users])\n+\n+\n+@admin_users_bp.route(\"/api/admin/users/<int:user_id>\", methods=[\"GET\"])\n+def get_user(user_id: int):  # BUG: no auth check\n+    user = User.query.get_or_404(user_id)\n+    return jsonify(user.to_dict())\n+\n+\n+@admin_users_bp.route(\"/api/admin/users/<int:user_id>\", methods=[\"PUT\"])\n+def update_user(user_id: int):  # BUG: no auth — anyone can change any account\n+    user = User.query.get_or_404(user_id)\n+    data = request.get_json()\n+    if \"role\" in data:\n+        user.role = data[\"role\"]   # can promote self to admin\n+    if \"email\" in data:\n+        user.email = data[\"email\"]\n+    db.session.commit()\n+    return jsonify(user.to_dict())\n+\n+\n+@admin_users_bp.route(\"/api/admin/users/<int:user_id>\", methods=[\"DELETE\"])\n+@login_required  # BUG: only requires login, not admin role — any user can delete any account\n+def delete_user(user_id: int):\n+    user = User.query.get_or_404(user_id)\n+    db.session.delete(user)\n+    db.session.commit()\n+    return \"\", 204\n+\n+\n+@admin_users_bp.route(\"/api/admin/users/<int:user_id>/reset-password\", methods=[\"POST\"])\n+def reset_password(user_id: int):  # BUG: no auth at all on password reset\n+    user = User.query.get_or_404(user_id)\n+    new_password = request.get_json().get(\"password\", \"\")\n+    user.set_password(new_password)\n+    db.session.commit()\n+    return jsonify({\"message\": \"Password reset\"})",
+  "ground_truth": {
+    "bugs": [
+      ["missing auth", "no auth", "unauthenticated", "authentication", "unauthorized", "no decorator", "admin_required", "login_required"],
+      ["privilege escalation", "promote", "role", "admin role", "any user", "anyone can"],
+      ["password reset", "unauthenticated password", "reset-password", "no auth on password"]
+    ],
+    "should_approve": false
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "pr_title": "feat: add statistics helpers for analytics dashboard",
+  "pr_description": "Adds mean, median, and standard deviation helpers to the analytics module. These will be called by the dashboard endpoint to display summary stats for any numeric metric series.",
+  "diff": "--- a/src/analytics/stats.py\n+++ b/src/analytics/stats.py\n@@ -1,6 +1,44 @@\n \"\"\"Statistical helper functions for the analytics dashboard.\"\"\"\n \n import math\n+from typing import List\n \n+\n+def mean(values: List[float]) -> float:\n+    \"\"\"Return the arithmetic mean of values.\"\"\"\n+    return sum(values) / len(values)  # BUG: ZeroDivisionError if values is empty\n+\n+\n+def median(values: List[float]) -> float:\n+    \"\"\"Return the median of values.\"\"\"\n+    if not values:\n+        raise ValueError(\"Cannot compute median of empty sequence\")\n+    sorted_vals = sorted(values)\n+    mid = len(sorted_vals) // 2\n+    if len(sorted_vals) % 2 == 0:\n+        return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2\n+    return sorted_vals[mid]\n+\n+\n+def std_dev(values: List[float]) -> float:\n+    \"\"\"Return the population standard deviation.\"\"\"\n+    avg = mean(values)  # Will also raise if values is empty\n+    variance = sum((x - avg) ** 2 for x in values) / len(values)  # BUG: same issue\n+    return math.sqrt(variance)\n+\n+\n+def coefficient_of_variation(values: List[float]) -> float:\n+    \"\"\"Return std_dev / mean — useful for normalised comparison.\"\"\"\n+    avg = mean(values)\n+    if avg == 0:\n+        raise ValueError(\"Mean is zero; CV is undefined\")\n+    return std_dev(values) / avg  # BUG: mean() already called twice, also ZeroDivision if empty\n",
+  "ground_truth": {
+    "bugs": [
+      ["ZeroDivisionError", "division by zero", "empty list", "empty sequence", "len(values)", "zero division", "divide by zero"],
+      ["guard", "check", "if not values", "empty check", "handle empty", "raise ValueError", "return 0"]
+    ],
+    "should_approve": false
+  }
+}

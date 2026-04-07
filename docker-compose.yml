@@ -1,0 +1,60 @@
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# PR Review OpenEnv
+#
+# Usage:
+#   docker compose up env          # start the environment server only
+#   docker compose run agent       # run the agent against all scenarios
+#   docker compose run agent easy_001_off_by_one   # run a specific scenario
+#
+# Required env vars (set in .env or export before running):
+#   API_BASE_URL   OpenAI-compatible endpoint, e.g. https://api.anthropic.com/v1
+#   API_KEY        LLM API key
+#   MODEL          Model name (default: claude-opus-4-6)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ---------- Environment server ----------
+  env:
+    build: .
+    container_name: pr-review-env
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --log-level info
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount scenarios at runtime so you can add/edit JSON without rebuilding
+      - ./data:/app/data:ro
+    environment:
+      PYTHONPATH: /app/src
+    networks:
+      - pr-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/scenarios"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------- Agent (inference) ----------
+  agent:
+    build: .
+    container_name: pr-review-agent
+    command: python src/inference.py ${SCENARIO_ID:-}
+    depends_on:
+      env:
+        condition: service_healthy
+    environment:
+      ENV_URL: http://env:8000
+      API_BASE_URL: ${API_BASE_URL}
+      API_KEY: ${API_KEY}
+      MODEL: ${MODEL:-claude-opus-4-6}
+      PYTHONPATH: /app/src
+    networks:
+      - pr-net
+    # No ports — agent is a one-shot CLI process
+    restart: "no"
+
+networks:
+  pr-net:
+    driver: bridge
