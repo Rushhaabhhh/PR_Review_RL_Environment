@@ -10,8 +10,9 @@ from typing import Optional
 import requests
 from openai import OpenAI
 
-MODEL_NAME: str = os.environ.get("MODEL_NAME", "")
-HF_TOKEN: str = os.environ.get("HF_TOKEN", "")
+os.environ.setdefault("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+MODEL_NAME: str = os.environ["MODEL_NAME"]
+HF_TOKEN: str = os.environ["HF_TOKEN"]
 API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
 ENV_URL: str = os.environ.get("ENV_URL", "http://localhost:7860")
 
@@ -133,16 +134,19 @@ Respond with JSON only — no markdown fences, no extra text:
 
 
 def log_start(task: str, env: str, model: str) -> None:
-    print("[START] " + json.dumps({"task": task, "env": env, "model": model}), flush=True)
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    print("[STEP] " + json.dumps({"step": step, "action": action, "reward": reward, "done": done, "error": error}), flush=True)
+    done_str = "true" if done else "false"
+    error_str = error if error is not None else "null"
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
 
 
 def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> None:
-    score = min(max(score, 0.0), 1.0)
-    print("[END] " + json.dumps({"success": success, "steps": steps, "score": round(score, 4), "rewards": rewards}), flush=True)
+    success_str = "true" if success else "false"
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={success_str} steps={steps} rewards={rewards_str}", flush=True)
 
 
 def _call_llm(pr_title: str, pr_description: str, diff: str) -> dict:

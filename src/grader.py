@@ -8,6 +8,7 @@ def _keyword_found(keyword: str, text: str) -> bool:
     """Case-insensitive search. Uses word boundaries for alphanumeric keywords
     to avoid substring false positives (e.g. 'null' matching 'nullable')."""
     kw = keyword.lower()
+    text = text.lower()
     if kw and re.match(r"\w", kw[0]) and re.match(r"\w", kw[-1]):
         return bool(re.search(r"\b" + re.escape(kw) + r"\b", text))
     return kw in text
