@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meta-hackathon-submission"
+version = "0.1.0"
+description = "My hackathon submission"
+readme = "README.md"
+requires-python = ">=3.9"
+
+# If the grader requires dependencies to be listed here instead of requirements.txt,
+# you can add them like this: ["torch", "transformers", "fastapi"] etc.
+dependencies = []
