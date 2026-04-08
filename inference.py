@@ -11,12 +11,14 @@ import requests
 from openai import OpenAI
 
 os.environ.setdefault("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+os.environ.setdefault("HF_TOKEN", "")
 MODEL_NAME: str = os.environ["MODEL_NAME"]
 HF_TOKEN: str = os.environ["HF_TOKEN"]
 API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
+API_KEY: str = os.environ.get("API_KEY", HF_TOKEN)
 ENV_URL: str = os.environ.get("ENV_URL", "http://localhost:7860")
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN or "fallback")
+client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 TASK_CONFIGS: dict[str, dict] = {
     "easy":   {"max_steps": 5,  "threshold": 0.7},
@@ -150,8 +152,6 @@ def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> No
 
 
 def _call_llm(pr_title: str, pr_description: str, diff: str) -> dict:
-    if not MODEL_NAME or not HF_TOKEN:
-        raise RuntimeError("MODEL_NAME or HF_TOKEN not set")
     user_msg = (
         f"## Pull Request: {pr_title}\n\n"
         f"### Description\n{pr_description}\n\n"
