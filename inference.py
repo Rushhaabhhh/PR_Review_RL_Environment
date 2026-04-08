@@ -227,7 +227,8 @@ def run_task(task: str) -> None:
             reward_val: float = result["reward"]["value"]
             done: bool = result["done"]
         except Exception as exc:
-            reward_val, done, step_error = 0.0, False, str(exc)
+            reward_val, done, step_error = 0.01, False, str(exc)
+        reward_val = round(max(0.01, min(0.99, reward_val)), 4)
         rewards.append(reward_val)
         log_step(step_num, comment, reward_val, done, step_error)
 
@@ -237,13 +238,13 @@ def run_task(task: str) -> None:
         resp = requests.post(f"{ENV_URL}/step", json={"action_type": action_type, "body": ""}, timeout=10)
         resp.raise_for_status()
         result = resp.json()
-        score = result["info"].get("score", 0.0)
-        reward_val = result["reward"]["value"]
+        score = round(max(0.01, min(0.99, result["info"].get("score", 0.01))), 4)
+        reward_val = round(max(0.01, min(0.99, result["reward"]["value"])), 4)
         rewards.append(reward_val)
         log_step(step_num, action_type, reward_val, True, None)
     except Exception as exc:
-        rewards.append(0.0)
-        log_step(step_num, action_type, 0.0, True, str(exc))
+        rewards.append(0.01)
+        log_step(step_num, action_type, 0.01, True, str(exc))
 
     log_end(score >= cfg["threshold"], step_num, score, rewards)
 

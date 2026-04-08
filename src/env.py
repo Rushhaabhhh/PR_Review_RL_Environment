@@ -138,6 +138,6 @@ class PRReviewEnv:
             decision=decision,
         )
         self._done = True
-        self._score = result["score"]
+        self._score = round(max(0.01, min(0.99, result["score"])), 4)
         decision_reward = _DECISION_CORRECT if result["decision_correct"] else _DECISION_WRONG
         return self._obs(), PRReviewReward(value=round(decision_reward, 4), breakdown=result), True, result
