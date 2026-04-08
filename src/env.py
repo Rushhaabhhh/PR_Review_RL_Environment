@@ -11,10 +11,10 @@ from typing import Optional
 from .grader import check_comment, grade
 from .models import PRReviewAction, PRReviewObservation, PRReviewReward
 
-_BUG_POOL = 0.7       # reward split evenly across all bugs in a scenario
-_FALSE_POS = -0.05    # penalty per comment that identifies no real bug
-_DECISION_CORRECT = 0.3
-_DECISION_WRONG = -0.3
+_BUG_POOL = 0.68      # reward split evenly across all bugs in a scenario
+_FALSE_POS = 0.02     # small reward for comments on clean/duplicate (avoids 0.0)
+_DECISION_CORRECT = 0.31
+_DECISION_WRONG = 0.02
 
 _SCENARIOS_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "scenarios")
 
@@ -119,7 +119,7 @@ class PRReviewEnv:
 
     def _comment_reward(self, body: str) -> float:
         if not body:
-            return 0.0
+            return _FALSE_POS
         assert self._scenario is not None
         bugs: list = self._scenario["ground_truth"].get("bugs", [])
         if not bugs:

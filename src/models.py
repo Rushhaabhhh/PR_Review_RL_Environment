@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class PRReviewAction(BaseModel):
@@ -28,3 +28,12 @@ class PRReviewObservation(BaseModel):
 class PRReviewReward(BaseModel):
     value: float
     breakdown: dict = {}
+
+    @field_validator("value")
+    @classmethod
+    def reward_must_be_strictly_between(cls, v: float) -> float:
+        if v <= 0.0:
+            return 0.01
+        if v >= 1.0:
+            return 0.99
+        return v

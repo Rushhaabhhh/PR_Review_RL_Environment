@@ -184,14 +184,14 @@ def run_task(task: str) -> None:
     cfg = TASK_CONFIGS[task]
     step_num = 0
     rewards: list[float] = []
-    score = 0.0
+    score = 0.01
 
     try:
         resp = requests.post(f"{ENV_URL}/reset", params={"task": task}, timeout=10)
         resp.raise_for_status()
         obs = resp.json()
     except Exception as exc:
-        log_end(False, 0, 0.0, [])
+        log_end(False, 0, 0.01, [0.01])
         print(f"[error] reset failed for task={task}: {exc}", flush=True)
         return
 
