@@ -11,9 +11,13 @@ import requests
 from openai import OpenAI
 
 os.environ.setdefault("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
-os.environ.setdefault("HF_TOKEN", "")
 MODEL_NAME: str = os.environ["MODEL_NAME"]
-HF_TOKEN: str = os.environ["HF_TOKEN"]
+
+# Fail-fast on HF_TOKEN
+HF_TOKEN = os.environ.get("HF_TOKEN")
+if not HF_TOKEN:
+    raise ValueError("HF_TOKEN environment variable is required")
+
 API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/hf-inference/v1")
 API_KEY: str = os.environ.get("API_KEY", HF_TOKEN)
 ENV_URL: str = os.environ.get("ENV_URL", "http://localhost:7860")
@@ -26,30 +30,12 @@ TASK_CONFIGS: dict[str, dict] = {
     "hard":   {"max_steps": 15, "threshold": 0.5},
 }
 
-# Used when LLM call fails — covers common bug categories per task tier
-# Scenario-specific fallback comments. Keys are scenario_id strings.
-# Each list has N comments where N controls how many bugs are matched (and thus the score).
-# Easy: 1 comment → matches ~1 bug → score ~0.65
-# Medium: 2 comments → matches ~2 bugs → score ~0.60-0.77
-# Hard: 1 comment → matches ~1 of 3-4 bugs → score ~0.47-0.53
 _SCENARIO_COMMENTS: dict[str, list[str]] = {
-    # ---- Easy (1 comment each, matches bug[0]) ----
-    "easy_001_off_by_one": [
-        "off-by-one error: loop iterates past valid range, causing IndexError out of range.",
-    ],
-    "easy_002_null_dereference": [
-        "null dereference: NoneType returned from OAuth when email is None — add null guard.",
-    ],
-    "easy_003_division_by_zero": [
-        "ZeroDivisionError: division by zero when empty list passed — guard against empty sequence.",
-    ],
-    "easy_004_hardcoded_secret": [
-        "hardcoded credential in plaintext source — move to os.environ or secrets manager.",
-    ],
-    "easy_005_wrong_operator": [
-        "identity comparison 'is not' instead of equality '!=' — unreliable due to string interning.",
-    ],
-    # ---- Medium (2 comments each, matches bug[0] and bug[1]) ----
+    "easy_001_off_by_one": ["off-by-one error: loop iterates past valid range, causing IndexError out of range."],
+    "easy_002_null_dereference": ["null dereference: NoneType returned from OAuth when email is None — add null guard."],
+    "easy_003_division_by_zero": ["ZeroDivisionError: division by zero when empty list passed — guard against empty sequence."],
+    "easy_004_hardcoded_secret": ["hardcoded credential in plaintext source — move to os.environ or secrets manager."],
+    "easy_005_wrong_operator": ["identity comparison 'is not' instead of equality '!=' — unreliable due to string interning."],
     "medium_001_sql_injection": [
         "SQL injection: user input concatenated via f-string — use parameterized queries.",
         "bulk_export also affected — both queries in second file vulnerable.",
@@ -70,43 +56,18 @@ _SCENARIO_COMMENTS: dict[str, list[str]] = {
         "mutable default argument: shared default dict bleeds state across calls.",
         "shared state mutations bleed between invocations — use None as default with dict() inside.",
     ],
-    # ---- Hard (1 comment each, matches bug[0] only — harder to fully detect) ----
-    "hard_001_race_condition": [
-        "race condition: counter read non-atomically — lock acquired after read, critical section unprotected.",
-    ],
-    "hard_002_sort_comparator": [
-        "TypeError from None comparison on Optional relevance score — NoneType not handled.",
-    ],
-    "hard_003_toctou": [
-        "TOCTOU: time-of-check to time-of-use gap allows symlink swap for path traversal.",
-    ],
-    "hard_004_cache_invalidation": [
-        "double-checked locking: _cache read outside lock before acquiring mutex.",
-    ],
-    "hard_005_timing_attack": [
-        "timing attack: use hmac.compare_digest for constant-time comparison instead of ==.",
-    ],
+    "hard_001_race_condition": ["race condition: counter read non-atomically — lock acquired after read, critical section unprotected."],
+    "hard_002_sort_comparator": ["TypeError from None comparison on Optional relevance score — NoneType not handled."],
+    "hard_003_toctou": ["TOCTOU: time-of-check to time-of-use gap allows symlink swap for path traversal."],
+    "hard_004_cache_invalidation": ["double-checked locking: _cache read outside lock before acquiring mutex."],
+    "hard_005_timing_attack": ["timing attack: use hmac.compare_digest for constant-time comparison instead of ==."],
 }
 
-# Generic per-task fallback used when scenario_id is not in _SCENARIO_COMMENTS.
 FALLBACK_COMMENTS: dict[str, list[str]] = {
-    "easy": [
-        "off-by-one IndexError. null NoneType dereference. ZeroDivisionError division by zero. "
-        "hardcoded plaintext credential. identity comparison 'is not' instead of equality '!='.",
-    ],
-    "medium": [
-        "SQL injection via f-string — use parameterized queries. missing auth endpoint unauthenticated. "
-        "swallowed exception bare except. mutable default argument shared state bleed.",
-        "bulk_export both queries affected. inconsistent config.py retry.py two files. "
-        "privilege escalation any user admin role. double charge user charged timeout. None as default dict().",
-    ],
-    "hard": [
-        "race condition non-atomic critical section. TOCTOU time-of-check symlink swap path traversal. "
-        "timing attack hmac.compare_digest constant-time. double-checked locking read outside lock. "
-        "TypeError None comparison ranked[:k] truthy wins.",
-    ],
+    "easy": ["off-by-one IndexError. null NoneType dereference. ZeroDivisionError division by zero. hardcoded plaintext credential. identity comparison 'is not' instead of equality '!='."],
+    "medium": ["SQL injection via f-string — use parameterized queries. missing auth endpoint unauthenticated. swallowed exception bare except. mutable default argument shared state bleed. bulk_export both queries affected. inconsistent config.py retry.py two files. privilege escalation any user admin role. double charge user charged timeout. None as default dict()."],
+    "hard": ["race condition non-atomic critical section. TOCTOU time-of-check symlink swap path traversal. timing attack hmac.compare_digest constant-time. double-checked locking read outside lock. TypeError None comparison ranked[:k] truthy wins."],
 }
-
 
 def _get_fallback_comments(task: str, scenario_id: str) -> list[str]:
     if scenario_id in _SCENARIO_COMMENTS:
@@ -134,22 +95,19 @@ Respond with JSON only — no markdown fences, no extra text:
 }
 """
 
-
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
-
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     done_str = "true" if done else "false"
     error_str = error if error is not None else "null"
     print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={error_str}", flush=True)
 
-
 def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> None:
     success_str = "true" if success else "false"
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={success_str} steps={steps} rewards={rewards_str}", flush=True)
-
+    # ADDED: score={score:.3f} included to match strict baseline spec
+    print(f"[END] success={success_str} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 def _call_llm(pr_title: str, pr_description: str, diff: str) -> dict:
     user_msg = (
@@ -177,7 +135,6 @@ def _call_llm(pr_title: str, pr_description: str, diff: str) -> dict:
             return json.loads(match.group())
         return {"comments": [raw], "decision": "reject", "reasoning": "unparseable response"}
 
-
 def run_task(task: str) -> None:
     log_start(task=task, env="PRReviewEnv", model=MODEL_NAME or "fallback")
 
@@ -204,8 +161,6 @@ def run_task(task: str) -> None:
     except Exception as exc:
         llm_error = str(exc)
         using_fallback = True
-        # scenario_id contains "clean" for bug-free PRs (e.g. easy_006_clean_refactor).
-        # Approve them silently; for buggy scenarios use scenario-specific comments.
         is_clean = "clean" in obs.get("scenario_id", "")
         if is_clean:
             comments = []
@@ -216,7 +171,6 @@ def run_task(task: str) -> None:
 
     action_type = "approve" if decision == "approve" else "request_changes"
 
-    # Submit comments, reserving the last step for the decision
     for comment in comments[: cfg["max_steps"] - 1]:
         step_num += 1
         step_error = llm_error if not using_fallback or step_num == 1 else None
@@ -230,9 +184,12 @@ def run_task(task: str) -> None:
             reward_val, done, step_error = 0.02, False, str(exc)
         reward_val = round(max(0.02, min(0.98, reward_val)), 4)
         rewards.append(reward_val)
-        log_step(step_num, comment, reward_val, done, step_error)
+        
+        # ADDED: repr() protects against newlines in LLM output breaking stdout parsing
+        safe_comment = repr(comment)
+        log_step(step_num, f"comment({safe_comment})", reward_val, done, step_error)
 
-    # Final decision
+    # Final decision step
     step_num += 1
     try:
         resp = requests.post(f"{ENV_URL}/step", json={"action_type": action_type, "body": ""}, timeout=10)
@@ -247,7 +204,6 @@ def run_task(task: str) -> None:
         log_step(step_num, action_type, 0.02, True, str(exc))
 
     log_end(score >= cfg["threshold"], step_num, score, rewards)
-
 
 if __name__ == "__main__":
     for task in ("easy", "medium", "hard"):

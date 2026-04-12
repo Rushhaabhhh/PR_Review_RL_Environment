@@ -3,7 +3,6 @@
 from __future__ import annotations
 import re
 
-
 def _keyword_found(keyword: str, text: str) -> bool:
     """Case-insensitive search. Uses word boundaries for alphanumeric keywords
     to avoid substring false positives (e.g. 'null' matching 'nullable')."""
@@ -12,7 +11,6 @@ def _keyword_found(keyword: str, text: str) -> bool:
     if kw and re.match(r"\w", kw[0]) and re.match(r"\w", kw[-1]):
         return bool(re.search(r"\b" + re.escape(kw) + r"\b", text))
     return kw in text
-
 
 def check_comment(comment: str, bugs: list) -> list[int]:
     """Return indices of bugs matched by this comment (for step-level rewards)."""
@@ -25,12 +23,10 @@ def check_comment(comment: str, bugs: list) -> list[int]:
             matched.append(i)
     return matched
 
-
 def grade(ground_truth: dict, comments: list[str], decision: str) -> dict:
     """Score a completed review session against ground truth.
 
-    Returns score in [0, 1] = bug_detection * 0.7 + decision * 0.3,
-    minus 0.2 false-rejection penalty if agent rejects a clean PR.
+    Returns score strictly in (0, 1) to satisfy OpenEnv validation constraints.
     """
     full_text = " ".join(comments).lower()
     bugs: list = ground_truth.get("bugs", [])

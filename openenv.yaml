@@ -30,4 +30,4 @@ action_space:
   file: "string (optional)"
   line: "integer (optional)"
   body: string
-reward_range: [-0.5, 1.0]
+reward_range: [0.0, 1.0]

@@ -1,19 +1,16 @@
-
 """Pydantic models for the PR Review OpenEnv."""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, field_validator
 
-
 class PRReviewAction(BaseModel):
-    action_type: str          # "comment" | "approve" | "request_changes"
+    action_type: Literal["comment", "approve", "request_changes"]
     file: Optional[str] = None
     line: Optional[int] = None
     body: str = ""
-
 
 class PRReviewObservation(BaseModel):
     diff: str
@@ -24,7 +21,6 @@ class PRReviewObservation(BaseModel):
     step_count: int = 0
     done: bool = False
     scenario_id: str = ""
-
 
 class PRReviewReward(BaseModel):
     value: float

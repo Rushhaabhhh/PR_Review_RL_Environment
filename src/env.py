@@ -11,8 +11,8 @@ from typing import Optional
 from .grader import check_comment, grade
 from .models import PRReviewAction, PRReviewObservation, PRReviewReward
 
-_BUG_POOL = 0.68      # reward split evenly across all bugs in a scenario
-_FALSE_POS = 0.02     # small reward for comments on clean/duplicate (avoids 0.0)
+_BUG_POOL = 0.68      
+_FALSE_POS = 0.02     
 _DECISION_CORRECT = 0.31
 _DECISION_WRONG = 0.02
 
@@ -22,6 +22,9 @@ TASK_PREFIXES = {"easy": "easy_", "medium": "medium_", "hard": "hard_"}
 TASK_MAX_STEPS = {"easy": 5, "medium": 10, "hard": 15}
 TASK_THRESHOLDS = {"easy": 0.7, "medium": 0.6, "hard": 0.5}
 
+def clamp_value(v: float) -> float:
+    """Ensure values are strictly within (0, 1)."""
+    return round(max(0.02, min(0.98, float(v))), 4)
 
 def _load_all() -> dict[str, dict]:
     paths = glob.glob(os.path.join(_SCENARIOS_DIR, "*.json"))
@@ -38,9 +41,7 @@ def _load_all() -> dict[str, dict]:
         store[sid] = data
     return store
 
-
 _STORE: dict[str, dict] = _load_all()
-
 
 class PRReviewEnv:
     def __init__(self, task: str = "easy") -> None:
@@ -85,7 +86,7 @@ class PRReviewEnv:
             reward_val = self._comment_reward(action.body)
             if action.body:
                 self._comments.append(action.body)
-            clipped = round(max(0.02, min(0.98, reward_val)), 4)
+            clipped = clamp_value(reward_val)
             return self._obs(), PRReviewReward(value=clipped), False, {}
 
         if action.action_type in ("approve", "request_changes"):
@@ -123,7 +124,7 @@ class PRReviewEnv:
         assert self._scenario is not None
         bugs: list = self._scenario["ground_truth"].get("bugs", [])
         if not bugs:
-            return _FALSE_POS  # any comment on a clean PR is hallucination
+            return _FALSE_POS 
         newly_found = [i for i in check_comment(body, bugs) if i not in self._rewarded_bugs]
         if newly_found:
             per_bug = _BUG_POOL / len(bugs)
@@ -139,8 +140,8 @@ class PRReviewEnv:
             decision=decision,
         )
         self._done = True
-        self._score = round(max(0.02, min(0.98, result["score"])), 4)
+        self._score = clamp_value(result["score"])
         result["score"] = self._score
         decision_reward = _DECISION_CORRECT if result["decision_correct"] else _DECISION_WRONG
-        clipped_reward = round(max(0.02, min(0.98, decision_reward)), 4)
+        clipped_reward = clamp_value(decision_reward)
         return self._obs(), PRReviewReward(value=clipped_reward, breakdown=result), True, result
